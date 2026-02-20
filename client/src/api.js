@@ -9,11 +9,12 @@ async function handleResponse(res) {
 }
 
 export const api = {
-  getRecipes(ingredients = []) {
-    const params = ingredients.length
-      ? `?ingredient=${encodeURIComponent(ingredients.join(','))}`
-      : '';
-    return fetch(`${BASE}/recipes${params}`).then(handleResponse);
+  getRecipes(ingredients = [], source = null) {
+    const p = new URLSearchParams();
+    if (ingredients.length) p.set('ingredient', ingredients.join(','));
+    if (source) p.set('source', source);
+    const qs = p.toString() ? `?${p}` : '';
+    return fetch(`${BASE}/recipes${qs}`).then(handleResponse);
   },
 
   getRecipe(id) {

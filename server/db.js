@@ -15,6 +15,7 @@ async function initDb() {
         description  TEXT,
         instructions TEXT,
         notes        TEXT,
+        source       TEXT,
         created_at   TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
       )`,
@@ -37,6 +38,9 @@ async function initDb() {
       args: [],
     },
   ], 'write');
+
+  // migration: add source column to existing DBs that predate this field
+  await client.execute({ sql: 'ALTER TABLE recipes ADD COLUMN source TEXT', args: [] }).catch(() => {});
 }
 
 module.exports = { client, initDb };

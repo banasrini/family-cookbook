@@ -20,17 +20,23 @@ async function hydrateRecipe(id) {
   return { ...recipe, ingredients };
 }
 
-// GET /api/recipes?ingredient=butter,flour
+// GET /api/recipes?ingredient=butter,flour&source=amma
 router.get('/', async (req, res) => {
   try {
-    const { ingredient } = req.query;
+    const { ingredient, source } = req.query;
+
+    const sourceClause = source ? ' AND r.source = ?' : '';
+    const sourceArgs = source ? [source] : [];
 
     let recipeIds;
 
     if (ingredient) {
       const names = ingredient.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       if (names.length === 0) {
-        const { rows } = await client.execute('SELECT id FROM recipes ORDER BY created_at DESC');
+        const { rows } = await client.execute({
+          sql: `SELECT id FROM recipes r WHERE 1=1${sourceClause} ORDER BY created_at DESC`,
+          args: sourceArgs,
+        });
         const recipes = await Promise.all(rows.map(r => hydrateRecipe(r.id)));
         return res.json(recipes);
       }
@@ -39,15 +45,18 @@ router.get('/', async (req, res) => {
         sql: `SELECT r.id FROM recipes r
               JOIN recipe_ingredients ri ON ri.recipe_id = r.id
               JOIN ingredients i         ON i.id = ri.ingredient_id
-              WHERE LOWER(i.name) IN (${placeholders})
+              WHERE LOWER(i.name) IN (${placeholders})${sourceClause}
               GROUP BY r.id
               HAVING COUNT(DISTINCT i.id) = ?
               ORDER BY r.created_at DESC`,
-        args: [...names, names.length],
+        args: [...names, ...sourceArgs, names.length],
       });
       recipeIds = rows.map(r => r.id);
     } else {
-      const { rows } = await client.execute('SELECT id FROM recipes ORDER BY created_at DESC');
+      const { rows } = await client.execute({
+        sql: `SELECT id FROM recipes r WHERE 1=1${sourceClause} ORDER BY created_at DESC`,
+        args: sourceArgs,
+      });
       recipeIds = rows.map(r => r.id);
     }
 
@@ -73,7 +82,7 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/recipes
 router.post('/', async (req, res) => {
-  const { name, description, instructions, notes, ingredients = [] } = req.body;
+  const { name, description, instructions, notes, source, ingredients = [] } = req.body;
 
   if (!name || name.trim() === '') {
     return res.status(400).json({ error: 'Recipe name is required' });
@@ -82,8 +91,8 @@ router.post('/', async (req, res) => {
   const tx = await client.transaction('write');
   try {
     const r = await tx.execute({
-      sql: 'INSERT INTO recipes (name, description, instructions, notes) VALUES (?, ?, ?, ?)',
-      args: [name.trim(), description ?? null, instructions ?? null, notes ?? null],
+      sql: 'INSERT INTO recipes (name, description, instructions, notes, source) VALUES (?, ?, ?, ?, ?)',
+      args: [name.trim(), description ?? null, instructions ?? null, notes ?? null, source ?? null],
     });
     const recipeId = Number(r.lastInsertRowid);
 
@@ -122,7 +131,7 @@ router.put('/:id', async (req, res) => {
   });
   if (!existing) return res.status(404).json({ error: 'Recipe not found' });
 
-  const { name, description, instructions, notes, ingredients } = req.body;
+  const { name, description, instructions, notes, source, ingredients } = req.body;
 
   const tx = await client.transaction('write');
   try {
@@ -132,9 +141,10 @@ router.put('/:id', async (req, res) => {
                 description  = COALESCE(?, description),
                 instructions = COALESCE(?, instructions),
                 notes        = ?,
+                source       = COALESCE(?, source),
                 updated_at   = datetime('now')
             WHERE id = ?`,
-      args: [name ?? null, description ?? null, instructions ?? null, notes ?? null, id],
+      args: [name ?? null, description ?? null, instructions ?? null, notes ?? null, source ?? null, id],
     });
 
     if (Array.isArray(ingredients)) {

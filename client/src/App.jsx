@@ -10,6 +10,7 @@ import styles from './styles/App.module.css';
 function Home() {
   const [recipes, setRecipes]             = useState([]);
   const [activeFilters, setActiveFilters] = useState([]);
+  const [sourceFilter, setSourceFilter]   = useState(null);
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState(null);
 
@@ -17,14 +18,14 @@ function Home() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getRecipes(activeFilters);
+      const data = await api.getRecipes(activeFilters, sourceFilter);
       setRecipes(data);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [activeFilters]);
+  }, [activeFilters, sourceFilter]);
 
   useEffect(() => {
     fetchRecipes();
@@ -32,7 +33,12 @@ function Home() {
 
   return (
     <div className={styles.home}>
-      <SearchBar onFilterChange={setActiveFilters} activeFilters={activeFilters} />
+      <SearchBar
+        onFilterChange={setActiveFilters}
+        activeFilters={activeFilters}
+        sourceFilter={sourceFilter}
+        onSourceChange={setSourceFilter}
+      />
       {error   && <p className={styles.error}>{error}</p>}
       {loading ? <p className={styles.loading}>Loading...</p> : <RecipeList recipes={recipes} />}
     </div>
