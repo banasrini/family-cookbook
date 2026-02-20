@@ -124,17 +124,18 @@ router.post('/', async (req, res) => {
 // PUT /api/recipes/:id
 router.put('/:id', async (req, res) => {
   const id = parseInt(req.params.id);
-
-  const { rows: [existing] } = await client.execute({
-    sql: 'SELECT id FROM recipes WHERE id = ?',
-    args: [id],
-  });
-  if (!existing) return res.status(404).json({ error: 'Recipe not found' });
-
   const { name, description, instructions, notes, source, ingredients } = req.body;
 
-  const tx = await client.transaction('write');
+  let tx;
   try {
+    const { rows: [existing] } = await client.execute({
+      sql: 'SELECT id FROM recipes WHERE id = ?',
+      args: [id],
+    });
+    if (!existing) return res.status(404).json({ error: 'Recipe not found' });
+
+    tx = await client.transaction('write');
+
     await tx.execute({
       sql: `UPDATE recipes
             SET name         = COALESCE(?, name),
@@ -173,7 +174,7 @@ router.put('/:id', async (req, res) => {
     await tx.commit();
     res.json(await hydrateRecipe(id));
   } catch (e) {
-    await tx.rollback();
+    if (tx) await tx.rollback();
     console.error(e);
     res.status(500).json({ error: 'Internal server error' });
   }

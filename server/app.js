@@ -11,6 +11,8 @@ app.use('/api/recipes', recipesRouter);
 app.use('/api/ingredients', ingredientsRouter);
 
 // Init DB schema on cold start
-initDb().catch(console.error);
+initDb().catch((err) => {
+  console.error('FATAL: database initialization failed. Check TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.', err);
+});
 
 module.exports = app;
