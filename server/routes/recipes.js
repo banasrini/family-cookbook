@@ -1,6 +1,5 @@
 const express = require('express');
 const { client } = require('../db');
-const Anthropic = require('@anthropic-ai/sdk');
 
 const router = express.Router();
 
@@ -214,6 +213,7 @@ router.post('/:id/ai-edit', async (req, res) => {
     .join('\n');
 
   try {
+    const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
