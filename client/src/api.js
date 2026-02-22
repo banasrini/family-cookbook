@@ -41,6 +41,14 @@ export const api = {
     return fetch(`${BASE}/recipes/${id}`, { method: 'DELETE' }).then(handleResponse);
   },
 
+  aiEditRecipe(id, note) {
+    return fetch(`${BASE}/recipes/${id}/ai-edit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    }).then(handleResponse);
+  },
+
   getIngredients() {
     return fetch(`${BASE}/ingredients`).then(handleResponse);
   },

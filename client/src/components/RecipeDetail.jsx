@@ -12,6 +12,10 @@ export default function RecipeDetail() {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
   const [saving, setSaving]           = useState(false);
+  const [aiEditOpen, setAiEditOpen]   = useState(false);
+  const [aiNote, setAiNote]           = useState('');
+  const [aiApplying, setAiApplying]   = useState(false);
+  const [aiError, setAiError]         = useState(null);
 
   useEffect(() => {
     api.getRecipe(id)
@@ -39,6 +43,22 @@ export default function RecipeDetail() {
     navigate('/');
   }
 
+  async function applyAiEdit() {
+    if (!aiNote.trim()) return;
+    setAiApplying(true);
+    setAiError(null);
+    try {
+      const updated = await api.aiEditRecipe(id, aiNote);
+      setRecipe(updated);
+      setAiNote('');
+      setAiEditOpen(false);
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setAiApplying(false);
+    }
+  }
+
   if (loading) return <p className={styles.state}>Loading...</p>;
   if (error)   return <p className={styles.state}>Error: {error}</p>;
   if (!recipe) return null;
@@ -51,6 +71,47 @@ export default function RecipeDetail() {
       {recipe.description && (
         <p className={styles.description}>{recipe.description}</p>
       )}
+
+      <div className={styles.aiEditContainer}>
+        {!aiEditOpen ? (
+          <button
+            onClick={() => { setAiEditOpen(true); setAiError(null); }}
+            className={styles.editNotesBtn}
+          >
+            Edit recipe
+          </button>
+        ) : (
+          <div className={styles.aiEditPanel}>
+            <p className={styles.aiEditLabel}>What would you like to change?</p>
+            <textarea
+              value={aiNote}
+              onChange={e => { setAiNote(e.target.value); setAiError(null); }}
+              rows={3}
+              placeholder="e.g. also add garlic to this, double the flour, remove cilantro"
+              className={styles.notesTextarea}
+              disabled={aiApplying}
+              autoFocus
+            />
+            {aiError && <p className={styles.aiEditError}>{aiError}</p>}
+            <div className={styles.notesActions}>
+              <button
+                onClick={applyAiEdit}
+                disabled={aiApplying || !aiNote.trim()}
+                className={styles.saveBtn}
+              >
+                {aiApplying ? 'Updating...' : 'Apply'}
+              </button>
+              <button
+                onClick={() => { setAiEditOpen(false); setAiNote(''); setAiError(null); }}
+                disabled={aiApplying}
+                className={styles.cancelBtn}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {recipe.ingredients.length > 0 && (
         <section className={styles.section}>
