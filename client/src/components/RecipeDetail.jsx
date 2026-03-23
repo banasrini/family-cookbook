@@ -16,12 +16,17 @@ export default function RecipeDetail() {
   const [aiNote, setAiNote]           = useState('');
   const [aiApplying, setAiApplying]   = useState(false);
   const [aiError, setAiError]         = useState(null);
+  const [tagInput, setTagInput]       = useState('');
+  const [allTags, setAllTags]         = useState([]);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [savingTags, setSavingTags]   = useState(false);
 
   useEffect(() => {
     api.getRecipe(id)
       .then(data => { setRecipe(data); setNotesValue(data.notes ?? ''); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+    api.getTags().then(setAllTags).catch(() => {});
   }, [id]);
 
   async function saveNotes() {
@@ -58,6 +63,57 @@ export default function RecipeDetail() {
       setAiApplying(false);
     }
   }
+
+  async function addTag(name) {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) return;
+    const currentNames = recipe.tags.map(t => t.name);
+    if (currentNames.includes(normalized)) {
+      setTagInput('');
+      setShowTagDropdown(false);
+      return;
+    }
+    setSavingTags(true);
+    try {
+      const updated = await api.updateRecipe(id, { tags: [...currentNames, normalized] });
+      setRecipe(updated);
+      setAllTags(prev => prev.includes(normalized) ? prev : [...prev, normalized].sort());
+    } catch (e) {
+      alert(`Failed to add tag: ${e.message}`);
+    } finally {
+      setSavingTags(false);
+      setTagInput('');
+      setShowTagDropdown(false);
+    }
+  }
+
+  async function removeTag(name) {
+    const currentNames = recipe.tags.map(t => t.name).filter(n => n !== name);
+    setSavingTags(true);
+    try {
+      const updated = await api.updateRecipe(id, { tags: currentNames });
+      setRecipe(updated);
+    } catch (e) {
+      alert(`Failed to remove tag: ${e.message}`);
+    } finally {
+      setSavingTags(false);
+    }
+  }
+
+  function handleTagKeyDown(e) {
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault();
+      addTag(tagInput);
+    }
+    if (e.key === 'Escape') setShowTagDropdown(false);
+  }
+
+  const tagSuggestions = tagInput.length > 0
+    ? allTags.filter(t =>
+        t.toLowerCase().includes(tagInput.toLowerCase()) &&
+        !recipe?.tags.map(x => x.name).includes(t.toLowerCase())
+      )
+    : [];
 
   if (loading) return <p className={styles.state}>Loading...</p>;
   if (error)   return <p className={styles.state}>Error: {error}</p>;
@@ -112,6 +168,46 @@ export default function RecipeDetail() {
           </div>
         )}
       </div>
+
+      <section className={styles.section}>
+        <h2>Tags</h2>
+        <div className={styles.tagsContainer}>
+          {recipe.tags.map(t => (
+            <span key={t.id} className={styles.customTag}>
+              #{t.name}
+              <button
+                type="button"
+                onClick={() => removeTag(t.name)}
+                disabled={savingTags}
+                aria-label={`Remove tag ${t.name}`}
+                className={styles.tagRemoveBtn}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <div className={styles.tagInputWrapper}>
+            <input
+              type="text"
+              value={tagInput}
+              onChange={e => { setTagInput(e.target.value); setShowTagDropdown(true); }}
+              onKeyDown={handleTagKeyDown}
+              onFocus={() => setShowTagDropdown(true)}
+              onBlur={() => setTimeout(() => setShowTagDropdown(false), 150)}
+              placeholder="Add a tag..."
+              className={styles.tagInput}
+              disabled={savingTags}
+            />
+            {showTagDropdown && tagSuggestions.length > 0 && (
+              <ul className={styles.tagDropdown}>
+                {tagSuggestions.slice(0, 8).map(s => (
+                  <li key={s} onMouseDown={() => addTag(s)}>#{s}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
 
       {recipe.ingredients.length > 0 && (
         <section className={styles.section}>

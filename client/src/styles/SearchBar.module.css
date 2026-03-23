@@ -88,6 +88,15 @@
   opacity: 1;
 }
 
+.tagChip {
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.tagChip button {
+  color: #0369a1;
+}
+
 .input {
   border: none;
   outline: none;

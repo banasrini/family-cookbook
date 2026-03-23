@@ -9,10 +9,11 @@ async function handleResponse(res) {
 }
 
 export const api = {
-  getRecipes(ingredients = [], source = null) {
+  getRecipes(ingredients = [], source = null, tags = []) {
     const p = new URLSearchParams();
     if (ingredients.length) p.set('ingredient', ingredients.join(','));
     if (source) p.set('source', source);
+    if (tags.length) p.set('tag', tags.join(','));
     const qs = p.toString() ? `?${p}` : '';
     return fetch(`${BASE}/recipes${qs}`).then(handleResponse);
   },
@@ -51,5 +52,9 @@ export const api = {
 
   getIngredients() {
     return fetch(`${BASE}/ingredients`).then(handleResponse);
+  },
+
+  getTags() {
+    return fetch(`${BASE}/tags`).then(handleResponse);
   },
 };

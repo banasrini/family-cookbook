@@ -11,6 +11,7 @@ function Home() {
   const [recipes, setRecipes]             = useState([]);
   const [activeFilters, setActiveFilters] = useState([]);
   const [sourceFilter, setSourceFilter]   = useState(null);
+  const [tagFilters, setTagFilters]       = useState([]);
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState(null);
 
@@ -18,14 +19,14 @@ function Home() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getRecipes(activeFilters, sourceFilter);
+      const data = await api.getRecipes(activeFilters, sourceFilter, tagFilters);
       setRecipes(data);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [activeFilters, sourceFilter]);
+  }, [activeFilters, sourceFilter, tagFilters]);
 
   useEffect(() => {
     fetchRecipes();
@@ -38,6 +39,8 @@ function Home() {
         activeFilters={activeFilters}
         sourceFilter={sourceFilter}
         onSourceChange={setSourceFilter}
+        tagFilters={tagFilters}
+        onTagFilterChange={setTagFilters}
       />
       {error   && <p className={styles.error}>{error}</p>}
       {loading ? <p className={styles.loading}>Loading...</p> : <RecipeList recipes={recipes} />}

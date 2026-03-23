@@ -24,6 +24,13 @@ export default function RecipeCard({ recipe }) {
           {preview}{hasMore ? ', ...' : ''}
         </p>
       )}
+      {recipe.tags && recipe.tags.length > 0 && (
+        <div className={styles.tagList}>
+          {recipe.tags.map(t => (
+            <span key={t.id} className={styles.customTag}>#{t.name}</span>
+          ))}
+        </div>
+      )}
     </Link>
   );
 }

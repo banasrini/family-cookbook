@@ -17,50 +17,80 @@ async function hydrateRecipe(id) {
           ORDER BY i.name`,
     args: [id],
   });
-  return { ...recipe, ingredients };
+  const { rows: tags } = await client.execute({
+    sql: `SELECT t.id, t.name
+          FROM recipe_tags rt
+          JOIN tags t ON t.id = rt.tag_id
+          WHERE rt.recipe_id = ?
+          ORDER BY t.name`,
+    args: [id],
+  });
+  return { ...recipe, ingredients, tags };
 }
 
-// GET /api/recipes?ingredient=butter,flour&source=amma
+async function upsertTags(tx, recipeId, tagNames) {
+  await tx.execute({ sql: 'DELETE FROM recipe_tags WHERE recipe_id = ?', args: [recipeId] });
+  for (const name of tagNames) {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) continue;
+    await tx.execute({
+      sql: 'INSERT OR IGNORE INTO tags (name) VALUES (?)',
+      args: [normalized],
+    });
+    const { rows: [row] } = await tx.execute({
+      sql: 'SELECT id FROM tags WHERE name = ?',
+      args: [normalized],
+    });
+    await tx.execute({
+      sql: 'INSERT OR IGNORE INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)',
+      args: [recipeId, row.id],
+    });
+  }
+}
+
+// GET /api/recipes?ingredient=butter,flour&source=amma&tag=quick,spicy
 router.get('/', async (req, res) => {
   try {
-    const { ingredient, source } = req.query;
+    const { ingredient, source, tag } = req.query;
 
-    const sourceClause = source ? ' AND r.source = ?' : '';
-    const sourceArgs = source ? [source] : [];
+    let sql = 'SELECT DISTINCT r.id FROM recipes r WHERE 1=1';
+    const args = [];
 
-    let recipeIds;
+    if (source) {
+      sql += ' AND r.source = ?';
+      args.push(source);
+    }
 
     if (ingredient) {
       const names = ingredient.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      if (names.length === 0) {
-        const { rows } = await client.execute({
-          sql: `SELECT id FROM recipes r WHERE 1=1${sourceClause} ORDER BY created_at DESC`,
-          args: sourceArgs,
-        });
-        const recipes = await Promise.all(rows.map(r => hydrateRecipe(r.id)));
-        return res.json(recipes);
+      if (names.length > 0) {
+        const placeholders = names.map(() => '?').join(', ');
+        sql += ` AND (
+          SELECT COUNT(DISTINCT i.id) FROM recipe_ingredients ri
+          JOIN ingredients i ON i.id = ri.ingredient_id
+          WHERE ri.recipe_id = r.id AND LOWER(i.name) IN (${placeholders})
+        ) = ?`;
+        args.push(...names, names.length);
       }
-      const placeholders = names.map(() => '?').join(', ');
-      const { rows } = await client.execute({
-        sql: `SELECT r.id FROM recipes r
-              JOIN recipe_ingredients ri ON ri.recipe_id = r.id
-              JOIN ingredients i         ON i.id = ri.ingredient_id
-              WHERE LOWER(i.name) IN (${placeholders})${sourceClause}
-              GROUP BY r.id
-              HAVING COUNT(DISTINCT i.id) = ?
-              ORDER BY r.created_at DESC`,
-        args: [...names, ...sourceArgs, names.length],
-      });
-      recipeIds = rows.map(r => r.id);
-    } else {
-      const { rows } = await client.execute({
-        sql: `SELECT id FROM recipes r WHERE 1=1${sourceClause} ORDER BY created_at DESC`,
-        args: sourceArgs,
-      });
-      recipeIds = rows.map(r => r.id);
     }
 
-    const recipes = await Promise.all(recipeIds.map(id => hydrateRecipe(id)));
+    if (tag) {
+      const tagNames = tag.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (tagNames.length > 0) {
+        const placeholders = tagNames.map(() => '?').join(', ');
+        sql += ` AND (
+          SELECT COUNT(DISTINCT t.id) FROM recipe_tags rt
+          JOIN tags t ON t.id = rt.tag_id
+          WHERE rt.recipe_id = r.id AND LOWER(t.name) IN (${placeholders})
+        ) = ?`;
+        args.push(...tagNames, tagNames.length);
+      }
+    }
+
+    sql += ' ORDER BY r.created_at DESC';
+
+    const { rows } = await client.execute({ sql, args });
+    const recipes = await Promise.all(rows.map(r => hydrateRecipe(r.id)));
     res.json(recipes);
   } catch (e) {
     console.error(e);
@@ -82,7 +112,7 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/recipes
 router.post('/', async (req, res) => {
-  const { name, description, instructions, notes, source, ingredients = [] } = req.body;
+  const { name, description, instructions, notes, source, ingredients = [], tags = [] } = req.body;
 
   if (!name || name.trim() === '') {
     return res.status(400).json({ error: 'Recipe name is required' });
@@ -112,6 +142,8 @@ router.post('/', async (req, res) => {
       });
     }
 
+    await upsertTags(tx, recipeId, tags);
+
     await tx.commit();
     res.status(201).json(await hydrateRecipe(recipeId));
   } catch (e) {
@@ -124,7 +156,7 @@ router.post('/', async (req, res) => {
 // PUT /api/recipes/:id
 router.put('/:id', async (req, res) => {
   const id = parseInt(req.params.id);
-  const { name, description, instructions, notes, source, ingredients } = req.body;
+  const { name, description, instructions, notes, source, ingredients, tags } = req.body;
 
   let tx;
   try {
@@ -169,6 +201,10 @@ router.put('/:id', async (req, res) => {
           args: [id, row.id, ing.quantity ?? null],
         });
       }
+    }
+
+    if (Array.isArray(tags)) {
+      await upsertTags(tx, id, tags);
     }
 
     await tx.commit();
